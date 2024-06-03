@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% import 'macros.html' as macros %}
+
+{% block title %}Редактировать книгу{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Редактировать книгу</h1>
+{{ macros.render_book_form(book=book, all_genres=all_genres, selected_genres=selected_genres, is_edit=True) }}
+{% endblock %}

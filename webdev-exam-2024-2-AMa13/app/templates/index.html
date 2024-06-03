@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Главная{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Список книг</h1>
+<div class="row">
+    {% for book in books %}
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">{{ book.title }}</h5>
+                <h6 class="card-subtitle mb-2 text-muted">Год: {{ book.year }}</h6>
+                <p class="card-text">
+                    <strong>Жанры:</strong> {{ book.genres }}<br>
+                    <strong>Средняя оценка:</strong> {{ book.average_rating }}<br>
+                    <strong>Количество рецензий:</strong> {{ book.review_count }}
+                </p>
+                <a href="{{ url_for('view_book', book_id=book.id) }}" class="btn btn-primary">Просмотр</a>
+                {% if current_user.is_authenticated and (current_user.is_admin() or current_user.role_id == MODERATOR_ROLE_ID) %}
+                <a href="{{ url_for('edit_book', book_id=book.id) }}" class="btn btn-secondary">Редактировать</a>
+                {% endif %}
+                {% if current_user.is_authenticated and current_user.is_admin() %}
+                <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ book.id }}">Удалить</button>
+                {% include 'delete_book.html' %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+<nav aria-label="Page navigation">
+    <ul class="pagination justify-content-center">
+        <li class="page-item {% if page == 1 %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('index', page=page-1) }}">Предыдущая</a>
+        </li>
+        <li class="page-item {% if not has_next %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('index', page=page+1) }}">Следующая</a>
+        </li>
+    </ul>
+</nav>
+{% if current_user.is_authenticated and current_user.is_admin() %}
+<a href="{{ url_for('add_book') }}" class="btn btn-success mt-4">Добавить книгу</a>
+{% endif %}
+{% endblock %}
