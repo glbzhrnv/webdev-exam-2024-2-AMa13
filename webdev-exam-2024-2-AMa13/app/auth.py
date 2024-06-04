@@ -8,29 +8,41 @@ bp = Blueprint('auth', __name__, url_prefix='/auth')
 mysql = MySQL(current_app)
 
 class User(UserMixin):
-    def __init__(self, user_id, login, role_id):
+    def __init__(self, user_id, login, role_id, first_name, last_name, middle_name):
         self.id = user_id
         self.login = login
         self.role_id = role_id
+        self.first_name = first_name
+        self.last_name = last_name
+        self.middle_name = middle_name
 
     def is_admin(self):
-        is_admin = self.role_id == current_app.config['ADMIN_ROLE_ID']
-        return is_admin
+        return self.role_id == current_app.config['ADMIN_ROLE_ID']
+
+    def is_moderator(self):
+        return self.role_id == current_app.config['MODERATOR_ROLE_ID']
 
     def can(self, action, record=None):
         check_role = CheckRole(record=record)
         method = getattr(check_role, action, None)
         if method:
-            result = method()
-            return result
+            return method()
         return False
 
 def load_user(user_id):
-    cursor = mysql.connection().cursor(dictionary=True)
+    conn = mysql.connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute('SELECT * FROM users WHERE id=%s', (user_id,))
     user = cursor.fetchone()
     if user:
-        return User(user_id=user['id'], login=user['login'], role_id=user['role_id'])
+        return User(
+            user_id=user['id'], 
+            login=user['login'], 
+            role_id=user['role_id'], 
+            first_name=user['first_name'], 
+            last_name=user['last_name'],
+            middle_name=user['middle_name']
+        )
     return None
 
 def init_login_manager(app):
@@ -60,7 +72,6 @@ def check_permission(action):
         return wrapper
     return decorator
 
-
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == "POST":
@@ -68,11 +79,19 @@ def login():
         password = request.form.get('password')
         remember = request.form.get('remember')
         if login and password:
-            cursor = mysql.connection().cursor(dictionary=True)
+            conn = mysql.connection()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('SELECT * FROM users WHERE login=%s AND password_hash = SHA2(%s, 256)', (login, password))
             user = cursor.fetchone()
             if user:
-                login_user(User(user_id=user['id'], login=user['login'], role_id=user['role_id']), remember=remember)
+                login_user(User(
+                    user_id=user['id'], 
+                    login=user['login'], 
+                    role_id=user['role_id'], 
+                    first_name=user['first_name'], 
+                    last_name=user['last_name'],
+                    middle_name=user['middle_name']
+                ), remember=remember)
                 flash('Вы успешно прошли аутентификацию', 'success')
                 next_page = request.args.get('next')
                 return redirect(next_page or url_for('index'))

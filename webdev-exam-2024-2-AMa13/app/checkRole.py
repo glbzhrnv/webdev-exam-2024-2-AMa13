@@ -16,7 +16,8 @@ class CheckRole:
         if current_user.id == self.record['id']:
             return True
         is_admin = current_user.is_admin()
-        return is_admin
+        is_moderator = current_user.is_moderator()
+        return is_admin or is_moderator
     
     def delete(self):
         return current_user.is_admin()

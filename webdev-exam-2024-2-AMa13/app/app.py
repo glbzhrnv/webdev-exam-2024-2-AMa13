@@ -59,7 +59,7 @@ def index():
 def add_book():
     if request.method == 'POST':
         title = request.form['title']
-        description = bleach.clean(request.form['description'])
+        description = request.form['description']
         year = request.form['year']
         publisher = request.form['publisher']
         author = request.form['author']
@@ -70,43 +70,40 @@ def add_book():
         conn = mysql.connection()
         cursor = conn.cursor()
 
-        try:
-            # Проверка обложки
-            cover_id = None
-            if cover:
-                cover_data = cover.read()
-                cover_md5 = hashlib.md5(cover_data).hexdigest()
-                cursor.execute('SELECT id FROM covers WHERE md5_hash=%s', (cover_md5,))
-                existing_cover = cursor.fetchone()
-
-                if existing_cover:
-                    cover_id = existing_cover['id']
-                else:
-                    cover_filename = secure_filename(cover.filename)
-                    cover_path = os.path.join(app.config['UPLOAD_FOLDER'], cover_filename)
-                    cover.save(cover_path)
-                    cursor.execute('''INSERT INTO covers (file_name, mime_type, md5_hash)
-                                      VALUES (%s, %s, %s)''',
-                                   (cover_filename, cover.mimetype, cover_md5))
-                    cover_id = cursor.lastrowid
-
-            # Добавление книги
-            cursor.execute('''INSERT INTO books (title, description, year, publisher, author, pages, cover_id)
-                              VALUES (%s, %s, %s, %s, %s, %s, %s)''',
-                              (title, description, year, publisher, author, pages, cover_id))
-            book_id = cursor.lastrowid
+        cover_id = None
+        if cover:
+            cover_filename = secure_filename(cover.filename)
+            cover_path = os.path.join(app.config['UPLOAD_FOLDER'], cover_filename)
+            cover_md5 = hashlib.md5(cover.read()).hexdigest()
             
-            # Добавление жанров
-            for genre_id in genres:
-                cursor.execute('INSERT INTO book_genres (book_id, genre_id) VALUES (%s, %s)', (book_id, genre_id))
-            
-            conn.commit()
-            flash('Книга добавлена', 'success')
-            return redirect(url_for('index'))
-        except Exception as e:
-            conn.rollback()
-            flash(f'При сохранении данных возникла ошибка. Проверьте корректность введённых данных. Ошибка: {str(e)}', 'danger')
+            # Проверяем, существует ли уже обложка с таким хэшем
+            cursor.execute('SELECT id FROM covers WHERE md5_hash = %s', (cover_md5,))
+            existing_cover = cursor.fetchone()
+            if existing_cover:
+                cover_id = existing_cover['id']
+            else:
+                # Перемещаем курсор в начало файла после чтения хэша
+                cover.seek(0)
+                cover.save(cover_path)
+                cursor.execute('''INSERT INTO covers (file_name, mime_type, md5_hash)
+                                  VALUES (%s, %s, %s)''',
+                               (cover_filename, cover.mimetype, cover_md5))
+                cover_id = cursor.lastrowid
 
+        # Добавление книги
+        cursor.execute('''INSERT INTO books (title, description, year, publisher, author, pages, cover_id)
+                          VALUES (%s, %s, %s, %s, %s, %s, %s)''',
+                       (title, description, year, publisher, author, pages, cover_id))
+        book_id = cursor.lastrowid
+        
+        # Добавление жанров
+        for genre_id in genres:
+            cursor.execute('INSERT INTO book_genres (book_id, genre_id) VALUES (%s, %s)', (book_id, genre_id))
+        
+        conn.commit()
+        flash('Книга добавлена', 'success')
+        return redirect(url_for('index'))
+    
     conn = mysql.connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute('SELECT * FROM genres')
@@ -171,23 +168,27 @@ def edit_book(book_id):
 def delete_book(book_id):
     conn = mysql.connection()
     cursor = conn.cursor(dictionary=True)
-    
+
+    # Удаление связанных записей из reviews
+    cursor.execute('DELETE FROM reviews WHERE book_id=%s', (book_id,))
+    conn.commit()
+
     # Удаление связанных записей из book_genres
     cursor.execute('DELETE FROM book_genres WHERE book_id=%s', (book_id,))
     conn.commit()
 
     cursor.execute('SELECT cover_id FROM books WHERE id=%s', (book_id,))
     book = cursor.fetchone()
-    
+
     if not book:
         flash('Книга не найдена', 'danger')
         return redirect(url_for('index'))
 
     cover_id = book['cover_id']
-    
+
     cursor.execute('DELETE FROM books WHERE id=%s', (book_id,))
     conn.commit()
-    
+
     if cover_id:
         cursor.execute('SELECT file_name FROM covers WHERE id=%s', (cover_id,))
         cover = cursor.fetchone()
@@ -197,9 +198,39 @@ def delete_book(book_id):
                 os.remove(cover_path)
             cursor.execute('DELETE FROM covers WHERE id=%s', (cover_id,))
             conn.commit()
-    
+
     flash('Книга удалена', 'success')
     return redirect(url_for('index'))
+
+@app.route('/add_review/<int:book_id>', methods=['GET', 'POST'])
+@login_required
+def add_review(book_id):
+    conn = mysql.connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Проверка, оставлял ли пользователь уже рецензию на эту книгу
+    cursor.execute('SELECT * FROM reviews WHERE book_id=%s AND user_id=%s', (book_id, current_user.id))
+    existing_review = cursor.fetchone()
+    if existing_review:
+        flash('Вы уже оставили рецензию на эту книгу.', 'warning')
+        return redirect(url_for('view_book', book_id=book_id))
+
+    if request.method == 'POST':
+        rating = request.form['rating']
+        text = bleach.clean(request.form['text'])
+        
+        try:
+            cursor.execute('''INSERT INTO reviews (book_id, user_id, rating, text)
+                              VALUES (%s, %s, %s, %s)''',
+                              (book_id, current_user.id, rating, text))
+            conn.commit()
+            flash('Рецензия добавлена', 'success')
+            return redirect(url_for('view_book', book_id=book_id))
+        except Exception as e:
+            conn.rollback()
+            flash(f'При сохранении данных возникла ошибка. Проверьте корректность введённых данных. Ошибка: {str(e)}', 'danger')
+
+    return render_template('add_review.html', book_id=book_id)
 
 @app.route('/view_book/<int:book_id>')
 @login_required
@@ -207,6 +238,7 @@ def delete_book(book_id):
 def view_book(book_id):
     conn = mysql.connection()
     cursor = conn.cursor(dictionary=True)
+    
     cursor.execute('SELECT * FROM books WHERE id=%s', (book_id,))
     book = cursor.fetchone()
     if not book:
@@ -218,10 +250,14 @@ def view_book(book_id):
 
     cursor.execute('SELECT * FROM covers WHERE id=%s', (book['cover_id'],))
     cover = cursor.fetchone()
-
+    
     description_html = markdown.markdown(book['description'])
 
-    return render_template('view_book.html', book=book, reviews=reviews, cover=cover, description_html=description_html)
+    cursor.execute('SELECT * FROM reviews WHERE book_id=%s AND user_id=%s', (book_id, current_user.id))
+    user_review = cursor.fetchone()
+    
+    return render_template('view_book.html', book=book, reviews=reviews, cover=cover, description_html=description_html, user_review=user_review)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
