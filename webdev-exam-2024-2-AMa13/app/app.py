@@ -109,7 +109,7 @@ def add_book():
     cursor.execute('SELECT * FROM genres')
     all_genres = cursor.fetchall()
     
-    return render_template('add_book.html', book=None, all_genres=all_genres, selected_genres=[])
+    return render_template('books/add_book.html', book=None, all_genres=all_genres, selected_genres=[])
 
 @app.route('/edit_book/<int:book_id>', methods=['GET', 'POST'])
 @login_required
@@ -158,7 +158,7 @@ def edit_book(book_id):
     cursor.execute('SELECT * FROM genres')
     all_genres = cursor.fetchall()
 
-    return render_template('edit_book.html', book=book, all_genres=all_genres, selected_genres=selected_genres)
+    return render_template('books/edit_book.html', book=book, all_genres=all_genres, selected_genres=selected_genres)
 
 
 
@@ -230,7 +230,7 @@ def add_review(book_id):
             conn.rollback()
             flash(f'При сохранении данных возникла ошибка. Проверьте корректность введённых данных. Ошибка: {str(e)}', 'danger')
 
-    return render_template('add_review.html', book_id=book_id)
+    return render_template('reviews/add_review.html', book_id=book_id)
 
 @app.route('/view_book/<int:book_id>')
 @login_required
@@ -238,7 +238,6 @@ def add_review(book_id):
 def view_book(book_id):
     conn = mysql.connection()
     cursor = conn.cursor(dictionary=True)
-    
     cursor.execute('SELECT * FROM books WHERE id=%s', (book_id,))
     book = cursor.fetchone()
     if not book:
@@ -250,14 +249,73 @@ def view_book(book_id):
 
     cursor.execute('SELECT * FROM covers WHERE id=%s', (book['cover_id'],))
     cover = cursor.fetchone()
-    
-    description_html = markdown.markdown(book['description'])
+
+    cursor.execute('SELECT * FROM collections WHERE user_id = %s', (current_user.id,))
+    collections = cursor.fetchall()
 
     cursor.execute('SELECT * FROM reviews WHERE book_id=%s AND user_id=%s', (book_id, current_user.id))
     user_review = cursor.fetchone()
-    
-    return render_template('view_book.html', book=book, reviews=reviews, cover=cover, description_html=description_html, user_review=user_review)
 
+    return render_template('books/view_book.html', book=book, reviews=reviews, cover=cover, collections=collections, description_html=bleach.clean(book['description']), user_review=user_review)
+
+@app.route('/collections', methods=['GET', 'POST'])
+@login_required
+@check_permission('show')
+def collections():
+    if request.method == 'POST':
+        name = request.form['name']
+        cursor = mysql.connection().cursor(dictionary=True)
+        cursor.execute('INSERT INTO collections (name, user_id) VALUES (%s, %s)', (name, current_user.id))
+        mysql.connection().commit()
+        flash('Подборка добавлена', 'success')
+        return redirect(url_for('collections'))
+    
+    cursor = mysql.connection().cursor(dictionary=True)
+    cursor.execute('''SELECT collections.id, collections.name, COUNT(collection_books.book_id) as book_count
+                      FROM collections
+                      LEFT JOIN collection_books ON collections.id = collection_books.collection_id
+                      WHERE collections.user_id = %s
+                      GROUP BY collections.id''', (current_user.id,))
+    collections = cursor.fetchall()
+    return render_template('collections/collections.html', collections=collections)
+
+@app.route('/collection/<int:collection_id>')
+@login_required
+@check_permission('show')
+def view_collection(collection_id):
+    cursor = mysql.connection().cursor(dictionary=True)
+    cursor.execute('SELECT * FROM collections WHERE id = %s AND user_id = %s', (collection_id, current_user.id))
+    collection = cursor.fetchone()
+    if not collection:
+        flash('Подборка не найдена', 'danger')
+        return redirect(url_for('collections'))
+
+    cursor.execute('''SELECT books.*
+                      FROM books
+                      JOIN collection_books ON books.id = collection_books.book_id
+                      WHERE collection_books.collection_id = %s''', (collection_id,))
+    books = cursor.fetchall()
+    return render_template('collections/view_collection.html', collection=collection, books=books)
+
+@app.route('/add_to_collection/<int:book_id>', methods=['POST'])
+@login_required
+def add_to_collection(book_id):
+    collection_id = request.form['collection_id']
+    conn = mysql.connection()
+    cursor = conn.cursor()
+
+    # Проверка на существование записи в таблице collection_books
+    cursor.execute('SELECT * FROM collection_books WHERE collection_id=%s AND book_id=%s', (collection_id, book_id))
+    existing_entry = cursor.fetchone()
+
+    if existing_entry:
+        flash('Данная книга уже существует в этой подборке', 'warning')
+    else:
+        cursor.execute('INSERT INTO collection_books (collection_id, book_id) VALUES (%s, %s)', (collection_id, book_id))
+        conn.commit()
+        flash('Книга успешно добавлена в подборку', 'success')
+
+    return redirect(url_for('view_book', book_id=book_id))
 
 if __name__ == '__main__':
     app.run(debug=True)

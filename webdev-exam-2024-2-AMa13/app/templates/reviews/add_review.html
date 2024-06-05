@@ -20,9 +20,5 @@
     </div>
     <button type="submit" class="btn btn-primary">Сохранить</button>
 </form>
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        let easyMDE = new EasyMDE({ element: document.getElementById("text") });
-    });
-</script>
+<script src="{{ url_for('static', filename='covers/js/add_review.js') }}"></script>
 {% endblock %}

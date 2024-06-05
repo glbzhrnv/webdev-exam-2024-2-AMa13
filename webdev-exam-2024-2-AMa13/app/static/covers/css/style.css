@@ -1,0 +1,16 @@
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+.content {
+    flex: 1;
+    margin-bottom: 1rem;
+}
+.footer {
+    background-color: #bbc0c5;
+    color: white;
+}
+.navbar-dark .navbar-nav .nav-link {
+    color: rgba(255,255,255,.75);
+}

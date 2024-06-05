@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Добавить в подборку{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Добавить в подборку</h1>
+<form action="{{ url_for('add_to_collection', book_id=book_id) }}" method="post">
+    <div class="mb-3">
+        <label for="collection_id" class="form-label">Выберите подборку</label>
+        <select class="form-select" id="collection_id" name="collection_id" required>
+            {% for collection in collections %}
+            <option value="{{ collection.id }}">{{ collection.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Добавить</button>
+    <a href="{{ url_for('view_book', book_id=book_id) }}" class="btn btn-secondary">Отмена</a>
+</form>
+{% endblock %}

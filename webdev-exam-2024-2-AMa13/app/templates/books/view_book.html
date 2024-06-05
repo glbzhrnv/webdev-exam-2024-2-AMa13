@@ -8,7 +8,6 @@
         {% else %}
             <img src="{{ url_for('static', filename='covers/default.png') }}" class="img-fluid" alt="No cover available">
         {% endif %}
-
     </div>
     <div class="col-md-8">
         <h2>{{ book.title }}</h2>
@@ -18,6 +17,9 @@
         <p><strong>Количество страниц:</strong> {{ book.pages }}</p>
         <p><strong>Описание:</strong></p>
         <div>{{ description_html | safe }}</div>
+        {% if current_user.is_authenticated and current_user.role_id == 3 %}
+            <button class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#addToCollectionModal">Добавить в подборку</button>
+        {% endif %}
     </div>
 </div>
 
@@ -34,7 +36,7 @@
             {% elif review.rating == 3 %} Удовлетворительно
             {% elif review.rating == 2 %} Неудовлетворительно
             {% elif review.rating == 1 %} Плохо
-            {% else %} ужасно
+            {% else %} Ужасно
             {% endif %}
         </h6>
         <p class="card-text">{{ review.text }}</p>
@@ -62,4 +64,30 @@
 {% elif current_user.is_authenticated %}
 <a href="{{ url_for('add_review', book_id=book.id) }}" class="btn btn-primary">Написать рецензию</a>
 {% endif %}
+
+<div class="modal fade" id="addToCollectionModal" tabindex="-1" aria-labelledby="addToCollectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addToCollectionModalLabel">Добавить в подборку</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('add_to_collection', book_id=book.id) }}" method="post">
+                    <div class="mb-3">
+                        <label for="collection_id" class="form-label">Выберите подборку</label>
+                        <select class="form-select" id="collection_id" name="collection_id" required>
+                            {% for collection in collections %}
+                            <option value="{{ collection.id }}">{{ collection.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Добавить</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

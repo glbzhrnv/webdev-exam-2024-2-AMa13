@@ -23,7 +23,7 @@
                     {% endif %}
                     {% if current_user.is_admin() %}
                         <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ book.id }}">Удалить</button>
-                        {% include 'delete_book.html' %}
+                        {% include 'books/delete_book.html' %}
                     {% endif %}
                 {% endif %}
             </div>
